@@ -3,9 +3,9 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from database import db, User, Promo, init_db
 from dotenv import load_dotenv
 import os
-import threading
-import requests as req
 import asyncio
+import json
+import requests as req
 
 load_dotenv()
 
@@ -31,6 +31,90 @@ with app.app_context():
         db.session.commit()
         print(f"Admin created: {admin_username}")
 
+# ---- НАСТРОЙКИ БОТА ----
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEB_APP_URL = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
+
+# ---- ИНИЦИАЛИЗАЦИЯ БОТА ----
+from aiogram import Bot, Dispatcher, types
+from aiogram.client.default import DefaultBotProperties
+
+bot = None
+dp = None
+
+if BOT_TOKEN:
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
+    dp = Dispatcher()
+
+    @dp.message()
+    async def handle_message(message: types.Message):
+        if not message.text:
+            return
+        print(f"Got message: {message.text}")
+        keyword = message.text.lower().strip()
+        try:
+            response = req.get(f"{WEB_APP_URL}/api/promo/{keyword}", timeout=5)
+            if response.status_code == 200:
+                promo = response.json()
+                if "error" not in promo:
+                    text = f"*{promo['title']}*\n"
+                    text += f"Промокод: `{promo['promo']}`\n"
+                    if promo.get("conditions"):
+                        for line in promo["conditions"].split("\n"):
+                            if line.strip():
+                                text += f" - {line.strip()}\n"
+                    if promo.get("link"):
+                        text += f"\n[Перейти на сайт]({promo['link']})"
+                    try:
+                        await message.answer(text)
+                    except Exception:
+                        await message.answer(text, parse_mode=None)
+        except Exception as e:
+            print(f"Bot error: {e}")
+
+    # Устанавливаем webhook при старте
+    async def setup_webhook():
+        await bot.delete_webhook()
+        await bot.set_webhook(f"{WEB_APP_URL}/webhook")
+        print(f"Webhook set to {WEB_APP_URL}/webhook")
+
+    asyncio.run(setup_webhook())
+else:
+    print("WARNING: BOT_TOKEN not set!")
+
+
+# ---- WEBHOOK ENDPOINT ----
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    if not bot or not dp:
+        return 'Bot not configured', 500
+
+    update_data = request.get_json()
+    if not update_data:
+        return 'No data', 400
+
+    print(f"Webhook received: {update_data}")
+
+    from aiogram.types import Update
+
+    async def process():
+        update = Update.model_validate(update_data)
+        await dp.feed_update(bot, update)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(process())
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return 'Error', 500
+    finally:
+        loop.close()
+
+    return 'ok', 200
+
+
+# ---- САЙТ ----
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -125,72 +209,6 @@ def get_promo(keyword):
 @app.route('/api/promos')
 def get_all_promos():
     return jsonify([p.to_dict() for p in Promo.query.all()])
-
-
-# ---- TELEGRAM БОТ ----
-
-# ---- TELEGRAM БОТ ЧЕРЕЗ WEBHOOK ----
-from aiogram import Bot, Dispatcher, types
-from aiogram.client.default import DefaultBotProperties
-
-bot_token = os.getenv("BOT_TOKEN")
-web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
-
-bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="Markdown"))
-dp = Dispatcher()
-
-@dp.message()
-async def handle_message(message: types.Message):
-    if not message.text:
-        return
-    print(f"Message: {message.text}")
-    keyword = message.text.lower().strip()
-    try:
-        response = req.get(f"{web_url}/api/promo/{keyword}", timeout=5)
-        if response.status_code == 200:
-            promo = response.json()
-            if "error" not in promo:
-                text = f"*{promo['title']}*\n"
-                text += f"Промокод: `{promo['promo']}`\n"
-                if promo.get("conditions"):
-                    for line in promo["conditions"].split("\n"):
-                        if line.strip():
-                            text += f" - {line.strip()}\n"
-                if promo.get("link"):
-                    text += f"\n[Перейти на сайт]({promo['link']})"
-                try:
-                    await message.answer(text)
-                except Exception:
-                    await message.answer(text, parse_mode=None)
-    except Exception as e:
-        print(f"Bot error: {e}")
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    import json
-    from aiogram.types import Update
-    
-    data = request.data
-    update = Update.model_validate(json.loads(data))
-    
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        loop.run_until_complete(dp.feed_update(bot, update))
-    except RuntimeError:
-        asyncio.run(dp.feed_update(bot, update))
-    
-    return 'ok', 200
-
-async def set_webhook():
-    await bot.set_webhook(f"{web_url}/webhook")
-    print("Webhook set!")
-
-import asyncio
-with app.app_context():
-    asyncio.run(set_webhook())
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
