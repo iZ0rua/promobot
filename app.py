@@ -93,23 +93,19 @@ def webhook():
     if not update_data:
         return 'No data', 400
 
-    print(f"Webhook received: {update_data}")
-
     from aiogram.types import Update
 
     async def process():
         update = Update.model_validate(update_data)
         await dp.feed_update(bot, update)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(process())
-    except Exception as e:
-        print(f"Webhook error: {e}")
-        return 'Error', 500
-    finally:
-        loop.close()
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        future = pool.submit(asyncio.run, process())
+        try:
+            future.result(timeout=10)
+        except Exception as e:
+            print(f"Webhook error: {e}")
 
     return 'ok', 200
 
