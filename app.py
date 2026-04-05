@@ -4,7 +4,6 @@ from database import db, User, Promo, init_db
 from dotenv import load_dotenv
 import os
 import threading
-import asyncio
 import requests as req
 
 load_dotenv()
@@ -21,7 +20,6 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Создаем админа при запуске
 with app.app_context():
     db.create_all()
     admin_username = os.getenv('ADMIN_USERNAME', 'admin')
@@ -132,20 +130,19 @@ def get_all_promos():
 
 def run_bot():
     import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    from aiogram import Bot, Dispatcher, types
+    from aiogram.client.default import DefaultBotProperties
+
+    bot_token = os.getenv("BOT_TOKEN")
+    web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
+
+    if not bot_token:
+        print("ERROR: BOT_TOKEN not set!")
+        return
+
+    print(f"Bot token found, starting...")
 
     async def bot_main():
-        from aiogram import Bot, Dispatcher, types
-        from aiogram.client.default import DefaultBotProperties
-
-        bot_token = os.getenv("BOT_TOKEN")
-        web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
-
-        if not bot_token:
-            print("BOT_TOKEN not set")
-            return
-
         bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="Markdown"))
         dp = Dispatcher()
 
@@ -153,6 +150,7 @@ def run_bot():
         async def handle_message(message: types.Message):
             if not message.text:
                 return
+            print(f"Message received: {message.text}")
             keyword = message.text.lower().strip()
             try:
                 response = req.get(f"{web_url}/api/promo/{keyword}", timeout=5)
@@ -174,19 +172,24 @@ def run_bot():
             except Exception as e:
                 print(f"Bot error: {e}")
 
-        print("Bot starting...")
+        print("Bot polling started!")
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
 
-    loop.run_until_complete(bot_main())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(bot_main())
+    except Exception as e:
+        print(f"Bot thread crashed: {e}")
+    finally:
+        loop.close()
 
 
 if __name__ == '__main__':
-    # Запускаем бота в фоновом потоке
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     print("Bot thread started")
 
-    # Запускаем сайт
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
