@@ -2,6 +2,7 @@ import os
 import requests
 from aiogram import Bot, Dispatcher, types
 from dotenv import load_dotenv
+import asyncio
 import logging
 
 load_dotenv()
@@ -28,11 +29,8 @@ def get_promo_from_api(keyword):
 async def handle_message(message: types.Message):
     if not message.text:
         return
-    
     keyword = message.text.lower().strip()
     promo_data = get_promo_from_api(keyword)
-    
-    # ВОТ ТУТ БЫЛА ОШИБКА РАНЬШЕ
     if promo_data and 'error' not in promo_data:
         text = f"**{promo_data['title']}**\n\n"
         text += f"Промокод: `{promo_data['promo']}`\n\n"
@@ -43,7 +41,10 @@ async def handle_message(message: types.Message):
         except:
             await message.answer(text)
 
-async def start_bot():
-    logger.info("🤖 Бот запускается...")
+async def main():
+    logger.info("🤖 Bot starting...")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    asyncio.run(main())
