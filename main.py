@@ -1,41 +1,46 @@
 import os
-import sys
-import threading
 import asyncio
+import threading
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from app import create_app
-from bot import start_bot
+from bot import dp, bot, on_startup, on_shutdown
 from dotenv import load_dotenv
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-def start_bot_thread():
-    """Запускает бота в фоновом потоке"""
-    def run():
+def run_bot():
+    """Запускает бота в отдельном event loop"""
+    async def start_bot():
         try:
-            logger.info("🤖 Запуск Telegram бота...")
-            asyncio.run(start_bot())
+            await on_startup()
+            await dp.start_polling(bot)
         except Exception as e:
-            logger.error(f"❌ Бот упал: {e}")
-            sys.exit(1)
-            
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
+            logger.error(f"❌ Bot error: {e}")
+        finally:
+            await on_shutdown()
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_bot())
 
 try:
     # Создаём Flask приложение
     app = create_app()
     
-    # Запускаем бота в фоне
-    start_bot_thread()
+    # Запускаем бота в отдельном потоке
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+    logger.info("✅ Bot thread started")
     
     # Запускаем веб-сервер
     port = int(os.environ.get('PORT', 5000))
-    logger.info(f"🚀 Сервер запущен на порту {port}")
-    app.run(host='0.0.0.0', port=port)
+    logger.info(f"🚀 Server running on port {port}")
+    app.run(host='0.0.0.0', port=port, threaded=True)
     
 except Exception as e:
-    logger.error(f"💥 Критическая ошибка при запуске: {e}")
-    sys.exit(1)
+    logger.error(f"💥 Critical error: {e}")
+    import traceback
+    traceback.print_exc()

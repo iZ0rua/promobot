@@ -1,17 +1,15 @@
 import os
 import requests
+import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from dotenv import load_dotenv
-import asyncio
-import logging
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 WEB_APP_URL = os.getenv('WEB_APP_URL', 'http://localhost:5000')
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -38,34 +36,26 @@ def format_promo_message(data):
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    """Игнорируем команду /start"""
     pass
 
 @dp.message()
 async def handle_message(message: types.Message):
-    """Реагируем ТОЛЬКО если есть промокод в базе"""
     if not message.text:
         return
     
     keyword = message.text.lower().strip()
     promo_data = get_promo_from_api(keyword)
     
-    # Отправляем сообщение ТОЛЬКО если промокод найден
     if promo_data and 'error' not in promo_data:
         text = format_promo_message(promo_data)
         try:
             await message.answer(text, parse_mode="Markdown")
         except:
             await message.answer(text)
-    # Если промокод не найден — НИЧЕГО не делаем (молчим)
 
-async def start_bot():
-    """Запуск бота"""
-    logger.info("🤖 Telegram bot is starting...")
-    try:
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
-    except Exception as e:
-        logger.error(f"Bot error: {e}")
-    finally:
-        await bot.session.close()
+async def on_startup():
+    logger.info("🤖 Telegram bot started")
+
+async def on_shutdown():
+    logger.info(" Telegram bot stopped")
+    await bot.session.close()
