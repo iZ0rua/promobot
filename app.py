@@ -186,10 +186,11 @@ def run_bot():
         loop.close()
 
 
-if __name__ == '__main__':
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    print("Bot thread started")
+# Запускаем бота при любом запуске — и через gunicorn, и через python
+bot_thread = threading.Thread(target=run_bot, daemon=True)
+bot_thread.start()
+print("Bot thread started")
 
+if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
