@@ -72,17 +72,16 @@ if BOT_TOKEN:
         except Exception as e:
             print(f"Bot error: {e}")
 
-    # Устанавливаем webhook ПРИ ЗАПУСКЕ ПРИЛОЖЕНИЯ, а не при импорте
+    # Устанавливаем webhook при старте
     async def setup_webhook():
-        if bot:
-            await bot.delete_webhook()
-            await bot.set_webhook(f"{WEB_APP_URL}/webhook")
-            print(f"Webhook set to {WEB_APP_URL}/webhook")
+        await bot.delete_webhook()
+        await bot.set_webhook(f"{WEB_APP_URL}/webhook")
+        print(f"Webhook set to {WEB_APP_URL}/webhook")
 
-# ---- HEALTH CHECK ДЛЯ CRON-JOB.ORG ----
-@app.route('/health')
-def health_check():
-    return 'OK', 200
+    asyncio.run(setup_webhook())
+else:
+    print("WARNING: BOT_TOKEN not set!")
+
 
 # ---- WEBHOOK ENDPOINT ----
 @app.route('/webhook', methods=['POST'])
@@ -130,6 +129,7 @@ def webhook():
         print(f"Webhook error: {e}")
 
     return 'ok', 200
+
 
 # ---- САЙТ ----
 @app.route('/')
@@ -228,12 +228,5 @@ def get_all_promos():
     return jsonify([p.to_dict() for p in Promo.query.all()])
 
 if __name__ == '__main__':
-    # Устанавливаем webhook при запуске приложения (не при импорте!)
-    if bot and dp:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(setup_webhook())
-        loop.close()
-    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
