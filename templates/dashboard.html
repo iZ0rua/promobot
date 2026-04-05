@@ -1,0 +1,67 @@
+{% extends "base.html" %} {% block title %}Панель управления - PromoBot{%
+endblock %} {% block content %}
+<div class="page-header">
+  <h1>Промокоды</h1>
+  <a href="{{ url_for('add_promo') }}" class="btn">Добавить промокод</a>
+</div>
+
+<div class="card">
+  {% if promos %}
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Ключевое слово</th>
+          <th>Название</th>
+          <th>Промокод</th>
+          <th>Ссылка</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for promo in promos %}
+        <tr>
+          <td><code>{{ promo.keyword }}</code></td>
+          <td>{{ promo.title }}</td>
+          <td><strong>{{ promo.promo_code }}</strong></td>
+          <td>
+            <a
+              href="{{ promo.link }}"
+              target="_blank"
+              style="color: var(--accent)"
+              >Перейти</a
+            >
+          </td>
+          <td>
+            <div class="actions-cell">
+              <a
+                href="{{ url_for('edit_promo', id=promo.id) }}"
+                class="btn btn-small"
+                >Изменить</a
+              >
+              <a
+                href="{{ url_for('delete_promo', id=promo.id) }}"
+                class="btn btn-danger btn-small"
+                onclick="return confirm('Удалить промокод?');"
+                >Удалить</a
+              >
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div
+    class="text-center"
+    style="color: var(--text-secondary); padding: 60px 20px"
+  >
+    <p style="font-size: 18px; margin-bottom: 20px">Промокодов пока нет</p>
+    <a href="{{ url_for('add_promo') }}" class="btn"
+      >Добавить первый промокод</a
+    >
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

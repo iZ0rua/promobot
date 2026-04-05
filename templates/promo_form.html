@@ -1,0 +1,99 @@
+{% extends "base.html" %} {% block title %}{{ 'Редактировать' if action ==
+'edit' else 'Добавить' }} промокод - PromoBot{% endblock %} {% block content %}
+<div class="card" style="max-width: 700px; margin: 0 auto">
+  <h2>{{ 'Редактировать' if action == 'edit' else 'Добавить' }} промокод</h2>
+
+  <form method="POST">
+    <div class="form-group">
+      <label for="keyword">Ключевое слово *</label>
+      <input
+        type="text"
+        id="keyword"
+        name="keyword"
+        value="{{ promo.keyword if promo else '' }}"
+        required
+        placeholder="пятёрочка"
+      />
+      <small>По этому слову бот будет находить промокод</small>
+    </div>
+
+    <div class="form-group">
+      <label for="title">Название магазина *</label>
+      <input
+        type="text"
+        id="title"
+        name="title"
+        value="{{ promo.title if promo else '' }}"
+        required
+        placeholder="Пятёрочка"
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="promo_code">Промокод *</label>
+      <input
+        type="text"
+        id="promo_code"
+        name="promo_code"
+        value="{{ promo.promo_code if promo else '' }}"
+        required
+        placeholder="prskatxu"
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="conditions">Условия использования *</label>
+      <textarea
+        id="conditions"
+        name="conditions"
+        required
+        placeholder="скидка 750₽ на первый заказ от 1500₽"
+      >
+{{ promo.conditions if promo else '' }}</textarea
+      >
+    </div>
+
+    <div class="form-group">
+      <label for="link">Ссылка *</label>
+      <input
+        type="url"
+        id="link"
+        name="link"
+        value="{{ promo.link if promo else '' }}"
+        required
+        placeholder="https://..."
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="emoji">Эмодзи</label>
+      <input
+        type="text"
+        id="emoji"
+        name="emoji"
+        value="{{ promo.emoji if promo else '' }}"
+        placeholder="🎁"
+        maxlength="10"
+      />
+      <small>Необязательно. Можно оставить пустым</small>
+    </div>
+
+    <div style="display: flex; gap: 12px; flex-wrap: wrap">
+      <button type="submit" class="btn" style="flex: 1; min-width: 150px">
+        {{ 'Сохранить изменения' if action == 'edit' else 'Добавить' }}
+      </button>
+      <a
+        href="{{ url_for('dashboard') }}"
+        class="btn btn-danger"
+        style="
+          flex: 1;
+          min-width: 150px;
+          text-align: center;
+          text-decoration: none;
+        "
+        >Отмена</a
+      >
+    </div>
+  </form>
+</div>
+{% endblock %}

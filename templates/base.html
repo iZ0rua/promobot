@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}PromoBot Admin{% endblock %}</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --bg-primary: #1a1a2e;
+        --bg-secondary: #16213e;
+        --bg-card: #0f3460;
+        --text-primary: #eaeaea;
+        --text-secondary: #b0b0b0;
+        --accent: #e94560;
+        --accent-hover: #c93852;
+        --success: #4ade80;
+        --error: #f87171;
+        --border: #2a2a4e;
+        --input-bg: #1a1a2e;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(
+          135deg,
+          var(--bg-primary) 0%,
+          var(--bg-secondary) 100%
+        );
+        color: var(--text-primary);
+        min-height: 100vh;
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      /* Header */
+      .header {
+        background: rgba(15, 52, 96, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 15px 0;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+
+      .header .container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .header h1 {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+
+      .header a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        margin-left: 20px;
+        transition: color 0.3s;
+        font-size: 14px;
+      }
+
+      .header a:hover {
+        color: var(--accent);
+      }
+
+      .user-info {
+        color: var(--text-secondary);
+        font-size: 14px;
+        margin-right: 15px;
+      }
+
+      /* Buttons */
+      .btn {
+        display: inline-block;
+        padding: 12px 24px;
+        background: var(--accent);
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(233, 69, 96, 0.3);
+      }
+
+      .btn:hover {
+        background: var(--accent-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(233, 69, 96, 0.4);
+      }
+
+      .btn-danger {
+        background: var(--error);
+        box-shadow: 0 4px 15px rgba(248, 113, 113, 0.3);
+      }
+
+      .btn-danger:hover {
+        background: #ef4444;
+        box-shadow: 0 6px 20px rgba(248, 113, 113, 0.4);
+      }
+
+      .btn-small {
+        padding: 8px 16px;
+        font-size: 12px;
+      }
+
+      .btn-block {
+        width: 100%;
+        text-align: center;
+      }
+
+      /* Cards */
+      .card {
+        background: var(--bg-card);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--border);
+      }
+
+      .card h2 {
+        margin-bottom: 20px;
+        font-size: 24px;
+        color: var(--text-primary);
+      }
+
+      /* Flash messages */
+      .flash-messages {
+        margin-bottom: 20px;
+      }
+
+      .flash {
+        padding: 14px 18px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        font-size: 14px;
+        animation: slideIn 0.3s ease;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .flash.error {
+        background: rgba(248, 113, 113, 0.15);
+        color: var(--error);
+        border: 1px solid var(--error);
+      }
+
+      .flash.success {
+        background: rgba(74, 222, 128, 0.15);
+        color: var(--success);
+        border: 1px solid var(--success);
+      }
+
+      /* Table */
+      .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 600px;
+      }
+
+      th,
+      td {
+        padding: 14px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+      }
+
+      th {
+        background: rgba(255, 255, 255, 0.05);
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.5px;
+      }
+
+      tr:hover {
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      td:last-child {
+        white-space: nowrap;
+      }
+
+      /* Forms */
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: var(--text-primary);
+        font-size: 14px;
+      }
+
+      .form-group input,
+      .form-group textarea {
+        width: 100%;
+        padding: 12px 16px;
+        background: var(--input-bg);
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        font-size: 14px;
+        color: var(--text-primary);
+        transition: all 0.3s;
+        font-family: inherit;
+      }
+
+      .form-group input:focus,
+      .form-group textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.1);
+      }
+
+      .form-group textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .form-group small {
+        color: var(--text-secondary);
+        font-size: 12px;
+        display: block;
+        margin-top: 6px;
+      }
+
+      /* Utilities */
+      .text-center {
+        text-align: center;
+      }
+      .mb-20 {
+        margin-bottom: 20px;
+      }
+      .mt-20 {
+        margin-top: 20px;
+      }
+
+      code {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-family: "Courier New", monospace;
+        font-size: 13px;
+        color: var(--accent);
+      }
+
+      .actions-cell {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      /* Page header */
+      .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+        gap: 15px;
+      }
+
+      .page-header h1 {
+        font-size: 32px;
+        font-weight: 700;
+      }
+
+      /* Login/Register boxes */
+      .auth-box {
+        max-width: 450px;
+        margin: 60px auto;
+      }
+
+      .auth-box h2 {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .auth-links {
+        text-align: center;
+        margin-top: 24px;
+        color: var(--text-secondary);
+      }
+
+      .auth-links a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .auth-links a:hover {
+        text-decoration: underline;
+      }
+
+      /* Mobile responsive */
+      @media (max-width: 768px) {
+        .container {
+          padding: 15px;
+        }
+
+        .header h1 {
+          font-size: 20px;
+        }
+
+        .header a {
+          margin-left: 12px;
+          font-size: 13px;
+        }
+
+        .page-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .page-header h1 {
+          font-size: 24px;
+        }
+
+        .btn {
+          padding: 10px 20px;
+          font-size: 13px;
+        }
+
+        .card {
+          padding: 16px;
+        }
+
+        .auth-box {
+          margin: 30px auto;
+        }
+
+        th,
+        td {
+          padding: 10px 8px;
+          font-size: 13px;
+        }
+
+        .actions-cell {
+          flex-direction: column;
+        }
+
+        .btn-small {
+          width: 100%;
+          text-align: center;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .header .container {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 10px;
+        }
+
+        .header a {
+          margin-left: 0;
+          margin-right: 15px;
+        }
+
+        .user-info {
+          margin-right: 0;
+          margin-bottom: 5px;
+        }
+
+        table {
+          font-size: 12px;
+        }
+
+        th,
+        td {
+          padding: 8px 6px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    {% if current_user.is_authenticated %}
+    <div class="header">
+      <div class="container">
+        <h1>PromoBot Admin</h1>
+        <div>
+          <span class="user-info">{{ current_user.username }}</span>
+          <a href="{{ url_for('dashboard') }}">Промокоды</a>
+          <a href="{{ url_for('logout') }}">Выйти</a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %} {% if
+      messages %}
+      <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %} {% endwith %} {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>
