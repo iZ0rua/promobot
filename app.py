@@ -86,26 +86,47 @@ else:
 # ---- WEBHOOK ENDPOINT ----
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    if not bot or not dp:
-        return 'Bot not configured', 500
-
     update_data = request.get_json()
     if not update_data:
         return 'No data', 400
 
-    from aiogram.types import Update
+    try:
+        message = update_data.get('message', {})
+        text = message.get('text', '')
+        chat_id = message.get('chat', {}).get('id')
 
-    async def process():
-        update = Update.model_validate(update_data)
-        await dp.feed_update(bot, update)
+        if not text or not chat_id:
+            return 'ok', 200
 
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        future = pool.submit(asyncio.run, process())
-        try:
-            future.result(timeout=10)
-        except Exception as e:
-            print(f"Webhook error: {e}")
+        print(f"Got message: {text} from {chat_id}")
+        keyword = text.lower().strip()
+
+        response = req.get(f"{WEB_APP_URL}/api/promo/{keyword}", timeout=5)
+        if response.status_code == 200:
+            promo = response.json()
+            if "error" not in promo:
+                reply = f"*{promo['title']}*\n"
+                reply += f"Промокод: `{promo['promo']}`\n"
+                if promo.get("conditions"):
+                    for line in promo["conditions"].split("\n"):
+                        if line.strip():
+                            reply += f" - {line.strip()}\n"
+                if promo.get("link"):
+                    reply += f"\n[Перейти на сайт]({promo['link']})"
+
+                req.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": chat_id,
+                        "text": reply,
+                        "parse_mode": "Markdown"
+                    },
+                    timeout=5
+                )
+                print(f"Reply sent to {chat_id}")
+
+    except Exception as e:
+        print(f"Webhook error: {e}")
 
     return 'ok', 200
 
