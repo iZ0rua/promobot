@@ -5,7 +5,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 
-load_dotenv()
+from pathlib import Path
+load_dotenv(Path(__file__).parent / ".env")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
