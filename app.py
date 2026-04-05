@@ -131,6 +131,10 @@ def get_all_promos():
 # ---- TELEGRAM БОТ ----
 
 def run_bot():
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     async def bot_main():
         from aiogram import Bot, Dispatcher, types
         from aiogram.client.default import DefaultBotProperties
@@ -139,7 +143,7 @@ def run_bot():
         web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
 
         if not bot_token:
-            print("BOT_TOKEN not set, bot not started")
+            print("BOT_TOKEN not set")
             return
 
         bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="Markdown"))
@@ -174,7 +178,7 @@ def run_bot():
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
 
-    asyncio.run(bot_main())
+    loop.run_until_complete(bot_main())
 
 
 if __name__ == '__main__':
