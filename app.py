@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 import threading
 import requests as req
+import asyncio
 
 load_dotenv()
 
@@ -167,14 +168,21 @@ async def handle_message(message: types.Message):
 @app.route('/webhook', methods=['POST'])
 def webhook():
     import json
-    import asyncio
     from aiogram.types import Update
-    data = request.get_data()
+    
+    data = request.data
     update = Update.model_validate(json.loads(data))
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(dp.feed_update(bot, update))
-    loop.close()
-    return 'ok'
+    
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        loop.run_until_complete(dp.feed_update(bot, update))
+    except RuntimeError:
+        asyncio.run(dp.feed_update(bot, update))
+    
+    return 'ok', 200
 
 async def set_webhook():
     await bot.set_webhook(f"{web_url}/webhook")
