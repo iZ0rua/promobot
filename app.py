@@ -165,12 +165,15 @@ async def handle_message(message: types.Message):
         print(f"Bot error: {e}")
 
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook():
     import json
+    import asyncio
     from aiogram.types import Update
-    data = await request.get_data()
+    data = request.get_data()
     update = Update.model_validate(json.loads(data))
-    await dp.feed_update(bot, update)
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(dp.feed_update(bot, update))
+    loop.close()
     return 'ok'
 
 async def set_webhook():
