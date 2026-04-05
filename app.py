@@ -3,6 +3,9 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from database import db, User, Promo, init_db
 from dotenv import load_dotenv
 import os
+import threading
+import asyncio
+import requests as req
 
 load_dotenv()
 
@@ -27,7 +30,7 @@ with app.app_context():
         new_admin.set_password(os.getenv('ADMIN_PASSWORD', 'admin123'))
         db.session.add(new_admin)
         db.session.commit()
-        print(f"✅ Admin created: {admin_username}")
+        print(f"Admin created: {admin_username}")
 
 @app.route('/')
 def index():
@@ -124,6 +127,62 @@ def get_promo(keyword):
 def get_all_promos():
     return jsonify([p.to_dict() for p in Promo.query.all()])
 
+
+# ---- TELEGRAM БОТ ----
+
+def run_bot():
+    async def bot_main():
+        from aiogram import Bot, Dispatcher, types
+        from aiogram.client.default import DefaultBotProperties
+
+        bot_token = os.getenv("BOT_TOKEN")
+        web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
+
+        if not bot_token:
+            print("BOT_TOKEN not set, bot not started")
+            return
+
+        bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="Markdown"))
+        dp = Dispatcher()
+
+        @dp.message()
+        async def handle_message(message: types.Message):
+            if not message.text:
+                return
+            keyword = message.text.lower().strip()
+            try:
+                response = req.get(f"{web_url}/api/promo/{keyword}", timeout=5)
+                if response.status_code == 200:
+                    promo = response.json()
+                    if "error" not in promo:
+                        text = f"*{promo['title']}*\n"
+                        text += f"Промокод: `{promo['promo']}`\n"
+                        if promo.get("conditions"):
+                            for line in promo["conditions"].split("\n"):
+                                if line.strip():
+                                    text += f" - {line.strip()}\n"
+                        if promo.get("link"):
+                            text += f"\n[Перейти на сайт]({promo['link']})"
+                        try:
+                            await message.answer(text)
+                        except Exception:
+                            await message.answer(text, parse_mode=None)
+            except Exception as e:
+                print(f"Bot error: {e}")
+
+        print("Bot starting...")
+        await bot.delete_webhook(drop_pending_updates=True)
+        await dp.start_polling(bot)
+
+    asyncio.run(bot_main())
+
+
 if __name__ == '__main__':
+    # Запускаем бота в фоновом потоке
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+    print("Bot thread started")
+
+    # Запускаем сайт
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
