@@ -130,8 +130,11 @@ def get_all_promos():
 
 def run_bot():
     import asyncio
+    import time
     from aiogram import Bot, Dispatcher, types
     from aiogram.client.default import DefaultBotProperties
+
+    time.sleep(5)  # ждём пока Flask запустится
 
     bot_token = os.getenv("BOT_TOKEN")
     web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
@@ -140,7 +143,7 @@ def run_bot():
         print("ERROR: BOT_TOKEN not set!")
         return
 
-    print(f"Bot token found, starting...")
+    print("Bot token found, starting...")
 
     async def bot_main():
         bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="Markdown"))
@@ -186,7 +189,6 @@ def run_bot():
         loop.close()
 
 
-# Запускаем бота при любом запуске — и через gunicorn, и через python
 bot_thread = threading.Thread(target=run_bot, daemon=True)
 bot_thread.start()
 print("Bot thread started")
