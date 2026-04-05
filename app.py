@@ -128,70 +128,58 @@ def get_all_promos():
 
 # ---- TELEGRAM БОТ ----
 
-def run_bot():
-    import asyncio
-    import time
-    from aiogram import Bot, Dispatcher, types
-    from aiogram.client.default import DefaultBotProperties
+# ---- TELEGRAM БОТ ЧЕРЕЗ WEBHOOK ----
+from aiogram import Bot, Dispatcher, types
+from aiogram.client.default import DefaultBotProperties
 
-    time.sleep(5)  # ждём пока Flask запустится
+bot_token = os.getenv("BOT_TOKEN")
+web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
 
-    bot_token = os.getenv("BOT_TOKEN")
-    web_url = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
+bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="Markdown"))
+dp = Dispatcher()
 
-    if not bot_token:
-        print("ERROR: BOT_TOKEN not set!")
+@dp.message()
+async def handle_message(message: types.Message):
+    if not message.text:
         return
-
-    print("Bot token found, starting...")
-
-    async def bot_main():
-        bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="Markdown"))
-        dp = Dispatcher()
-
-        @dp.message()
-        async def handle_message(message: types.Message):
-            if not message.text:
-                return
-            print(f"Message received: {message.text}")
-            keyword = message.text.lower().strip()
-            try:
-                response = req.get(f"{web_url}/api/promo/{keyword}", timeout=5)
-                if response.status_code == 200:
-                    promo = response.json()
-                    if "error" not in promo:
-                        text = f"*{promo['title']}*\n"
-                        text += f"Промокод: `{promo['promo']}`\n"
-                        if promo.get("conditions"):
-                            for line in promo["conditions"].split("\n"):
-                                if line.strip():
-                                    text += f" - {line.strip()}\n"
-                        if promo.get("link"):
-                            text += f"\n[Перейти на сайт]({promo['link']})"
-                        try:
-                            await message.answer(text)
-                        except Exception:
-                            await message.answer(text, parse_mode=None)
-            except Exception as e:
-                print(f"Bot error: {e}")
-
-        print("Bot polling started!")
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    print(f"Message: {message.text}")
+    keyword = message.text.lower().strip()
     try:
-        loop.run_until_complete(bot_main())
+        response = req.get(f"{web_url}/api/promo/{keyword}", timeout=5)
+        if response.status_code == 200:
+            promo = response.json()
+            if "error" not in promo:
+                text = f"*{promo['title']}*\n"
+                text += f"Промокод: `{promo['promo']}`\n"
+                if promo.get("conditions"):
+                    for line in promo["conditions"].split("\n"):
+                        if line.strip():
+                            text += f" - {line.strip()}\n"
+                if promo.get("link"):
+                    text += f"\n[Перейти на сайт]({promo['link']})"
+                try:
+                    await message.answer(text)
+                except Exception:
+                    await message.answer(text, parse_mode=None)
     except Exception as e:
-        print(f"Bot thread crashed: {e}")
-    finally:
-        loop.close()
+        print(f"Bot error: {e}")
 
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    import json
+    from aiogram.types import Update
+    data = await request.get_data()
+    update = Update.model_validate(json.loads(data))
+    await dp.feed_update(bot, update)
+    return 'ok'
 
-bot_thread = threading.Thread(target=run_bot, daemon=True)
-bot_thread.start()
-print("Bot thread started")
+async def set_webhook():
+    await bot.set_webhook(f"{web_url}/webhook")
+    print("Webhook set!")
+
+import asyncio
+with app.app_context():
+    asyncio.run(set_webhook())
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
