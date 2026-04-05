@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 import logging
 from aiogram import Bot, Dispatcher, types
@@ -9,6 +10,12 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 WEB_APP_URL = os.getenv('WEB_APP_URL', 'http://localhost:5000')
+
+# Отключаем обработку сигналов (нужно для работы в потоке)
+if sys.platform != 'win32':
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -53,9 +60,14 @@ async def handle_message(message: types.Message):
         except:
             await message.answer(text)
 
-async def on_startup():
-    logger.info("🤖 Telegram bot started")
-
-async def on_shutdown():
-    logger.info(" Telegram bot stopped")
-    await bot.session.close()
+async def start_bot():
+    """Запуск бота без обработки сигналов"""
+    logger.info("🤖 Telegram bot is starting...")
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        # Отключаем skip_updates чтобы не было ошибки set_wakeup_fd
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    except Exception as e:
+        logger.error(f"Bot error: {e}")
+    finally:
+        await bot.session.close()
