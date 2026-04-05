@@ -12,17 +12,24 @@ def init_db(app):
     
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # 🔧 НАСТРОЙКИ ПУЛА СОЕДИНЕНИЙ (для стабильности с Neon)
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,   # Проверяет соединение перед запросом
+        'pool_recycle': 300,     # Пересоздаёт соединение каждые 5 минут
+    }
+    
     db.init_app(app)
 
-from flask_login import UserMixin  # ← Добавь этот импорт в начало файла
+from flask_login import UserMixin
 
-class User(db.Model, UserMixin):  # ← Добавь , UserMixin
+class User(db.Model, UserMixin):
     """Модель пользователя"""
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)  # ← Убедись, что 256!
+    password_hash = db.Column(db.String(256), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     promos = db.relationship('Promo', backref='author', lazy=True, cascade='all, delete-orphan')
