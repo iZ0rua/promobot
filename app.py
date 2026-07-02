@@ -58,9 +58,11 @@ def get_all_promos():
 # ---- WEBHOOK (бот отвечает здесь) ----
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    """Обработчик вебхука: ищет ключевые слова ВНУТРИ текста (без HTTP-запросов к себе!)"""
+    from database import Promo, Keyword  # Импортируем модели внутри функции
+    
     update_data = request.get_json()
     if not update_data:
-        print("❌ Webhook: нет данных")
         return 'No data', 400
 
     try:
@@ -68,43 +70,36 @@ def webhook():
         text = message.get('text', '')
         chat_id = message.get('chat', {}).get('id')
 
-        print(f"🔍 DEBUG: text='{text}', chat_id={chat_id}")  # ← ОТЛАДКА
-
         if not text or not chat_id:
-            print(f"⚠️ Пропуск: text={bool(text)}, chat_id={bool(chat_id)}")
             return 'ok', 200
 
-        # Загружаем все промокоды
-        res = requests.get(f"{WEB_APP_URL}/api/promos", timeout=5)
-        print(f"📡 API /api/promos статус: {res.status_code}")  # ← ОТЛАДКА
-        
-        if res.status_code != 200:
-            return 'ok', 200
-            
-        promos = res.json()
-        print(f"📦 Загружено промокодов: {len(promos)}")  # ← ОТЛАДКА
-        
-        # Покажем, какие ключи есть у каждого промокода
-        for p in promos:
-            print(f"   - Promo '{p.get('title')}': keywords={p.get('keywords')}")  # ← ОТЛАДКА
-        
+        print(f"💬 Webhook: '{text}' from {chat_id}")
         text_lower = text.lower().strip()
 
-        # Строим карту ключей
+        # 🔹 ПРЯМОЙ ЗАПРОС К БАЗЕ (вместо requests.get к самому себе!)
+        promos = Promo.query.all()
+        
+        # Строим карту: {ключевое_слово: данные_промокода}
         keyword_map = {}
         for promo in promos:
-            for kw in promo.get('keywords', []):
-                keyword_map[kw.lower().strip()] = promo
+            # Собираем все ключи: из новой таблицы + старое поле
+            keys = [k.keyword.lower().strip() for k in promo.keywords_list]
+            if promo.keyword and promo.keyword.lower().strip() not in keys:
+                keys.append(promo.keyword.lower().strip())
+            
+            for kw in keys:
+                if kw:  # пропускаем пустые
+                    keyword_map[kw] = promo.to_dict()  # используем to_dict для форматирования
         
-        print(f"🗂️ Построена карта из {len(keyword_map)} ключей: {list(keyword_map.keys())[:10]}")  # ← ОТЛАДКА
+        print(f"🗂️ Построена карта из {len(keyword_map)} ключей")
         
-        # Ищем совпадение
+        # Ищем совпадение в тексте (длинные ключи в приоритете)
         found_promo = None
         sorted_keys = sorted(keyword_map.keys(), key=len, reverse=True)
         for kw in sorted_keys:
             if kw in text_lower:
                 found_promo = keyword_map[kw]
-                print(f"🎯 НАЙДЕНО: '{kw}' в '{text}'")  # ← ОТЛАДКА
+                print(f"🎯 Найдено: '{kw}' в '{text}'")
                 break
         
         if found_promo:
@@ -123,14 +118,14 @@ def webhook():
                 timeout=5
             )
             if response.status_code == 200 and response.json().get("ok"):
-                print(f"✅ ОТВЕТ ОТПРАВЛЕН в {chat_id}")
+                print(f"✅ Ответ отправлен в {chat_id}")
             else:
-                print(f"❌ Telegram API error: {response.status_code} - {response.text}")
+                print(f"❌ Telegram API error: {response.text}")
         else:
-            print(f"🤫 НЕ НАЙДЕНО ключей в тексте: '{text}'")
+            print(f"🤫 Ключевые слова не найдены в: '{text}'")
 
     except Exception as e:
-        print(f"💥 Webhook CRASH: {e}")
+        print(f"💥 Webhook error: {e}")
         import traceback
         traceback.print_exc()
 
