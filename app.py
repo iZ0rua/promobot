@@ -60,6 +60,7 @@ def get_all_promos():
 def webhook():
     update_data = request.get_json()
     if not update_data:
+        print("❌ Webhook: нет данных")
         return 'No data', 400
 
     try:
@@ -67,32 +68,43 @@ def webhook():
         text = message.get('text', '')
         chat_id = message.get('chat', {}).get('id')
 
+        print(f"🔍 DEBUG: text='{text}', chat_id={chat_id}")  # ← ОТЛАДКА
+
         if not text or not chat_id:
+            print(f"⚠️ Пропуск: text={bool(text)}, chat_id={bool(chat_id)}")
             return 'ok', 200
 
-        print(f"💬 Webhook: '{text}' from {chat_id}")
-        text_lower = text.lower().strip()
-
-        # Загружаем все промокоды один раз
+        # Загружаем все промокоды
         res = requests.get(f"{WEB_APP_URL}/api/promos", timeout=5)
+        print(f"📡 API /api/promos статус: {res.status_code}")  # ← ОТЛАДКА
+        
         if res.status_code != 200:
             return 'ok', 200
             
         promos = res.json()
+        print(f"📦 Загружено промокодов: {len(promos)}")  # ← ОТЛАДКА
         
-        # Строим карту: {ключевое_слово: данные_промокода}
+        # Покажем, какие ключи есть у каждого промокода
+        for p in promos:
+            print(f"   - Promo '{p.get('title')}': keywords={p.get('keywords')}")  # ← ОТЛАДКА
+        
+        text_lower = text.lower().strip()
+
+        # Строим карту ключей
         keyword_map = {}
         for promo in promos:
             for kw in promo.get('keywords', []):
                 keyword_map[kw.lower().strip()] = promo
-                
-        # Ищем совпадение в тексте сообщения (длинные ключи в приоритете)
+        
+        print(f"🗂️ Построена карта из {len(keyword_map)} ключей: {list(keyword_map.keys())[:10]}")  # ← ОТЛАДКА
+        
+        # Ищем совпадение
         found_promo = None
         sorted_keys = sorted(keyword_map.keys(), key=len, reverse=True)
         for kw in sorted_keys:
             if kw in text_lower:
                 found_promo = keyword_map[kw]
-                print(f" Найдено: '{kw}' в '{text}'")
+                print(f"🎯 НАЙДЕНО: '{kw}' в '{text}'")  # ← ОТЛАДКА
                 break
         
         if found_promo:
@@ -111,14 +123,16 @@ def webhook():
                 timeout=5
             )
             if response.status_code == 200 and response.json().get("ok"):
-                print(f"✅ Ответ отправлен в {chat_id}")
+                print(f"✅ ОТВЕТ ОТПРАВЛЕН в {chat_id}")
             else:
-                print(f"❌ Telegram API error: {response.text}")
+                print(f"❌ Telegram API error: {response.status_code} - {response.text}")
         else:
-            print(f"🤫 Ключевые слова не найдены в: '{text}'")
+            print(f"🤫 НЕ НАЙДЕНО ключей в тексте: '{text}'")
 
     except Exception as e:
-        print(f"💥 Webhook error: {e}")
+        print(f"💥 Webhook CRASH: {e}")
+        import traceback
+        traceback.print_exc()
 
     return 'ok', 200
 
