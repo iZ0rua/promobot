@@ -5,16 +5,16 @@
 
   <form method="POST">
     <div class="form-group">
-      <label for="keyword">Ключевое слово *</label>
+      <label for="keywords">Ключевые слова *</label>
       <input
         type="text"
-        id="keyword"
-        name="keyword"
+        id="keywords"
+        name="keywords"
         value="{{ promo.keyword if promo else '' }}"
         required
-        placeholder="пятёрочка"
+        placeholder="перекресток, перекрёсток, perekrestok"
       />
-      <small>По этому слову бот будет находить промокод</small>
+      <small>Вводи через запятую. Бот среагирует на любое из этих слов</small>
     </div>
 
     <div class="form-group">
