@@ -1,11 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from database import db, User, Promo, init_db
+from database import db, User, Promo, Keyword, init_db
 from dotenv import load_dotenv
 import os
-import asyncio
-import json
-import requests as req
+import requests
 
 load_dotenv()
 
@@ -22,7 +20,7 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 with app.app_context():
-    db.create_all()
+    db.create_all()  # Создаст новую таблицу keywords, старые данные останутся
     admin_username = os.getenv('ADMIN_USERNAME', 'admin')
     if not User.query.filter_by(username=admin_username).first():
         new_admin = User(username=admin_username)
@@ -31,61 +29,35 @@ with app.app_context():
         db.session.commit()
         print(f"Admin created: {admin_username}")
 
-# ---- НАСТРОЙКИ БОТА ----
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEB_APP_URL = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
 
-# ---- ИНИЦИАЛИЗАЦИЯ БОТА ----
-from aiogram import Bot, Dispatcher, types
-from aiogram.client.default import DefaultBotProperties
+# ---- API ENDPOINTS ----
+@app.route('/api/promo/<keyword>')
+def get_promo(keyword):
+    """Ищет промокод по ключевому слову (новая таблица + старое поле)"""
+    kw = keyword.lower().strip()
+    
+    # 1. Ищем в новой таблице
+    match = Keyword.query.filter_by(keyword=kw).first()
+    if match:
+        return jsonify(match.promo.to_dict())
+    
+    # 2. Фоллбэк на старое поле
+    promo = Promo.query.filter_by(keyword=kw).first()
+    if promo:
+        return jsonify(promo.to_dict())
+        
+    return jsonify({'error': 'not found'}), 404
 
-bot = None
-dp = None
+@app.route('/api/promos')
+def get_all_promos():
+    """Возвращает все промокоды с их ключевыми словами"""
+    return jsonify([p.to_dict() for p in Promo.query.all()])
 
-if BOT_TOKEN:
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
-    dp = Dispatcher()
-
-    @dp.message()
-    async def handle_message(message: types.Message):
-        if not message.text:
-            return
-        print(f"Got message: {message.text}")
-        keyword = message.text.lower().strip()
-        try:
-            response = req.get(f"{WEB_APP_URL}/api/promo/{keyword}", timeout=5)
-            if response.status_code == 200:
-                promo = response.json()
-                if "error" not in promo:
-                    text = f"*{promo['title']}*\n"
-                    text += f"Промокод: `{promo['promo']}`\n"
-                    if promo.get("conditions"):
-                        for line in promo["conditions"].split("\n"):
-                            if line.strip():
-                                text += f" - {line.strip()}\n"
-                    if promo.get("link"):
-                        text += f"\n[Перейти на сайт]({promo['link']})"
-                    try:
-                        await message.answer(text)
-                    except Exception:
-                        await message.answer(text, parse_mode=None)
-        except Exception as e:
-            print(f"Bot error: {e}")
-
-    # Устанавливаем webhook при старте
-    async def setup_webhook():
-        await bot.delete_webhook()
-        await bot.set_webhook(f"{WEB_APP_URL}/webhook")
-        print(f"Webhook set to {WEB_APP_URL}/webhook")
-
-    asyncio.run(setup_webhook())
-else:
-    print("WARNING: BOT_TOKEN not set!")
-
-
+# ---- WEBHOOK (бот отвечает здесь) ----
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    """Обработчик вебхука: ищет ключевые слова ВНУТРИ текста сообщения"""
     update_data = request.get_json()
     if not update_data:
         return 'No data', 400
@@ -101,25 +73,28 @@ def webhook():
         print(f"💬 Webhook: '{text}' from {chat_id}")
         text_lower = text.lower().strip()
 
-        # 1. Получаем ВСЕ промокоды
-        promos_response = req.get(f"{WEB_APP_URL}/api/promos", timeout=5)
-        if promos_response.status_code != 200:
-            print("⚠️ Не удалось загрузить список промокодов")
+        # Загружаем все промокоды один раз
+        res = requests.get(f"{WEB_APP_URL}/api/promos", timeout=5)
+        if res.status_code != 200:
             return 'ok', 200
+            
+        promos = res.json()
         
-        promos = promos_response.json()
-        
-        # 2. Ищем совпадение внутри текста (длинные ключи в приоритете)
+        # Строим карту: {ключевое_слово: данные_промокода}
+        keyword_map = {}
+        for promo in promos:
+            for kw in promo.get('keywords', []):
+                keyword_map[kw.lower().strip()] = promo
+                
+        # Ищем совпадение в тексте сообщения (длинные ключи в приоритете)
         found_promo = None
-        sorted_promos = sorted(promos, key=lambda p: len(p['keyword']), reverse=True)
-        for promo in sorted_promos:
-            keyword = promo['keyword'].lower()
-            if keyword in text_lower:
-                print(f"🔍 Найдено: '{keyword}' в '{text}'")
-                found_promo = promo
+        sorted_keys = sorted(keyword_map.keys(), key=len, reverse=True)
+        for kw in sorted_keys:
+            if kw in text_lower:
+                found_promo = keyword_map[kw]
+                print(f" Найдено: '{kw}' в '{text}'")
                 break
         
-        # 3. Если нашли — отправляем ответ
         if found_promo:
             reply = f"*{found_promo['title']}*\n"
             reply += f"Промокод: `{found_promo['promo']}`\n"
@@ -130,17 +105,11 @@ def webhook():
             if found_promo.get("link"):
                 reply += f"\n[Перейти на сайт]({found_promo['link']})"
 
-            response = req.post(
+            response = requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                json={
-                    "chat_id": chat_id,
-                    "text": reply,
-                    "parse_mode": "Markdown"
-                },
+                json={"chat_id": chat_id, "text": reply, "parse_mode": "Markdown"},
                 timeout=5
             )
-            
-            # Проверяем ответ от Telegram API
             if response.status_code == 200 and response.json().get("ok"):
                 print(f"✅ Ответ отправлен в {chat_id}")
             else:
@@ -153,8 +122,7 @@ def webhook():
 
     return 'ok', 200
 
-
-# ---- САЙТ ----
+# ---- САЙТ (Роуты) ----
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -192,7 +160,6 @@ def dashboard():
 def add_promo():
     if request.method == 'POST':
         promo = Promo(
-            keyword=request.form.get('keyword').lower().strip(),
             title=request.form.get('title'),
             promo_code=request.form.get('promo_code'),
             conditions=request.form.get('conditions'),
@@ -202,12 +169,29 @@ def add_promo():
         )
         try:
             db.session.add(promo)
+            db.session.flush()  # Получаем ID до коммита
+            
+            # Сохраняем ключевые слова
+            raw_keywords = request.form.get('keywords', '')
+            kw_list = [k.strip().lower() for k in raw_keywords.split(',') if k.strip()]
+            
+            for kw_text in kw_list:
+                if Keyword.query.filter_by(keyword=kw_text).first():
+                    db.session.rollback()
+                    flash(f'Ключ "{kw_text}" уже занят другим промокодом', 'error')
+                    return redirect(url_for('add_promo'))
+                db.session.add(Keyword(keyword=kw_text, promo_id=promo.id))
+                
+            # Дублируем первый ключ в старое поле для совместимости
+            if kw_list:
+                promo.keyword = kw_list[0]
+                
             db.session.commit()
             flash('Промокод добавлен!', 'success')
             return redirect(url_for('dashboard'))
-        except:
+        except Exception as e:
             db.session.rollback()
-            flash('Ошибка: такое ключевое слово уже существует', 'error')
+            flash(f'Ошибка: {e}', 'error')
     return render_template('promo_form.html', promo=None, action='add')
 
 @app.route('/promo/edit/<int:id>', methods=['GET', 'POST'])
@@ -215,19 +199,36 @@ def add_promo():
 def edit_promo(id):
     promo = Promo.query.get_or_404(id)
     if request.method == 'POST':
-        promo.keyword = request.form.get('keyword').lower().strip()
         promo.title = request.form.get('title')
         promo.promo_code = request.form.get('promo_code')
         promo.conditions = request.form.get('conditions')
         promo.link = request.form.get('link')
         promo.emoji = request.form.get('emoji', '')
+        
         try:
+            # Обновляем ключи: удаляем старые, добавляем новые
+            Keyword.query.filter_by(promo_id=promo.id).delete()
+            
+            raw_keywords = request.form.get('keywords', '')
+            kw_list = [k.strip().lower() for k in raw_keywords.split(',') if k.strip()]
+            
+            for kw_text in kw_list:
+                exists = Keyword.query.filter_by(keyword=kw_text).first()
+                if exists and exists.promo_id != promo.id:
+                    db.session.rollback()
+                    flash(f'Ключ "{kw_text}" уже занят', 'error')
+                    return redirect(url_for('edit_promo', id=id))
+                db.session.add(Keyword(keyword=kw_text, promo_id=promo.id))
+                
+            if kw_list:
+                promo.keyword = kw_list[0]  # Обновляем старое поле
+                
             db.session.commit()
             flash('Промокод обновлён!', 'success')
             return redirect(url_for('dashboard'))
-        except:
+        except Exception as e:
             db.session.rollback()
-            flash('Ошибка', 'error')
+            flash(f'Ошибка: {e}', 'error')
     return render_template('promo_form.html', promo=promo, action='edit')
 
 @app.route('/promo/delete/<int:id>')
@@ -238,17 +239,6 @@ def delete_promo(id):
     db.session.commit()
     flash('Промокод удалён', 'success')
     return redirect(url_for('dashboard'))
-
-@app.route('/api/promo/<keyword>')
-def get_promo(keyword):
-    promo = Promo.query.filter_by(keyword=keyword.lower()).first()
-    if promo:
-        return jsonify(promo.to_dict())
-    return jsonify({'error': 'not found'}), 404
-
-@app.route('/api/promos')
-def get_all_promos():
-    return jsonify([p.to_dict() for p in Promo.query.all()])
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
