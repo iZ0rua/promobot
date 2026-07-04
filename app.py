@@ -32,6 +32,72 @@ with app.app_context():
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEB_APP_URL = os.getenv("WEB_APP_URL", "https://promobot-gdjx.onrender.com")
 
+# ---- MAX ----
+MAX_BOT_TOKEN = os.getenv("MAX_BOT_TOKEN")
+MAX_API_URL = "https://platform-api2.max.ru"
+
+def send_max_message(chat_id, text):
+    """Отправляет сообщение в MAX через platform-api2.max.ru"""
+    try:
+        response = requests.post(
+            f"{MAX_API_URL}/messages",
+            params={"chat_id": chat_id},
+            headers={
+                "Authorization": MAX_BOT_TOKEN,
+                "Content-Type": "application/json",
+            },
+            json={"text": text, "format": "markdown"},
+            timeout=5,
+        )
+        if response.status_code == 200:
+            print(f"✅ MAX: ответ отправлен в {chat_id}", flush=True)
+        else:
+            print(f"❌ MAX API Error: {response.status_code} | {response.text}", flush=True)
+    except Exception as e:
+        print(f"💥 MAX send error: {e}", flush=True)
+
+
+def find_promo_by_text(text_lower):
+    """Общая логика поиска промокода по тексту — используется и в Telegram, и в MAX вебхуках"""
+    from database import Promo
+
+    promos = Promo.query.all()
+
+    keyword_map = {}
+    for promo in promos:
+        keys = []
+        if promo.keywords_list:
+            keys.extend([k.keyword.lower().strip() for k in promo.keywords_list if k.keyword])
+        if promo.keyword and promo.keyword.lower().strip() not in keys:
+            keys.append(promo.keyword.lower().strip())
+
+        for kw in keys:
+            if kw and kw not in keyword_map:
+                keyword_map[kw] = promo.to_dict()
+
+    sorted_keys = sorted(keyword_map.keys(), key=len, reverse=True)
+    for kw in sorted_keys:
+        if kw in text_lower:
+            return kw, keyword_map[kw]
+
+    return None, None
+
+
+def format_promo_reply(found_promo):
+    """Форматирует ответ с промокодом — общий для Telegram и MAX"""
+    reply = f"*{found_promo['title']}*\n"
+    reply += f"Промокод: `{found_promo['promo']}`\n"
+
+    if found_promo.get("conditions"):
+        for line in found_promo["conditions"].split("\n"):
+            if line.strip():
+                reply += f" - {line.strip()}\n"
+
+    if found_promo.get("link"):
+        reply += f"\n[Перейти на сайт]({found_promo['link']})"
+
+    return reply
+
 # ---- API ENDPOINTS ----
 @app.route('/api/promo/<keyword>')
 def get_promo(keyword):
@@ -151,6 +217,45 @@ def webhook():
 
     return 'ok', 200
 # ⚠️ УБЕДИСЬ, ЧТО ПОСЛЕ ЭТОЙ СТРОКИ НЕТ НИКАКИХ СИМВОЛОВ, ПРОБЕЛОВ ИЛИ "ЮБ"
+
+# ---- WEBHOOK MAX (бот отвечает здесь) ----
+@app.route('/webhook/max', methods=['POST'])
+def webhook_max():
+    """Обработчик вебхука MAX: та же логика поиска ключей, что и в Telegram-вебхуке"""
+    update_data = request.get_json()
+    if not update_data:
+        print("❌ MAX Webhook: нет данных", flush=True)
+        return 'No data', 400
+
+    try:
+        if update_data.get('update_type') != 'message_created':
+            return 'ok', 200
+
+        message = update_data.get('message', {})
+        text = message.get('body', {}).get('text', '')
+        chat_id = message.get('recipient', {}).get('chat_id')
+
+        if not text or not chat_id:
+            return 'ok', 200
+
+        print(f"💬 MAX Webhook: '{text}' from {chat_id}", flush=True)
+        text_lower = text.lower().strip()
+
+        found_keyword, found_promo = find_promo_by_text(text_lower)
+
+        if found_promo:
+            print(f" НАЙДЕНО (MAX): '{found_keyword}' в '{text}'", flush=True)
+            reply = format_promo_reply(found_promo)
+            send_max_message(chat_id, reply)
+        else:
+            print(f"🤫 MAX: не найдено ключей в: '{text}'", flush=True)
+
+    except Exception as e:
+        print(f"💥 CRITICAL MAX Webhook Error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+
+    return 'ok', 200
 
 # ---- САЙТ (Роуты) ----
 @app.route('/')
@@ -283,6 +388,22 @@ try:
     print(f"🤖 Webhook setup: {res.status_code} - {res.text[:100]}")
 except Exception as e:
     print(f"⚠️ Не удалось установить вебхук при старте: {e}")
+
+# --- АВТОУСТАНОВКА ВЕБХУКА MAX ПРИ СТАРТЕ ---
+try:
+    if MAX_BOT_TOKEN:
+        max_webhook_url = f"{WEB_APP_URL}/webhook/max"
+        res = requests.post(
+            f"{MAX_API_URL}/subscriptions",
+            headers={"Authorization": MAX_BOT_TOKEN, "Content-Type": "application/json"},
+            json={"url": max_webhook_url},
+            timeout=10
+        )
+        print(f"🤖 MAX Webhook setup: {res.status_code} - {res.text[:200]}")
+    else:
+        print("⚠️ MAX_BOT_TOKEN не задан — пропускаю регистрацию MAX-вебхука")
+except Exception as e:
+    print(f"⚠️ Не удалось установить MAX-вебхук при старте: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
