@@ -42,7 +42,7 @@ class Keyword(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     keyword = db.Column(db.String(100), nullable=False, index=True)
     promo_id = db.Column(db.Integer, db.ForeignKey('promos.id'), nullable=False)
-    promo = db.relationship('Promo', backref='keywords_list', lazy=True)
+    promo = db.relationship('Promo', backref=db.backref('keywords_list', cascade='all, delete-orphan'), lazy=True)
 
 class Promo(db.Model):
     __tablename__ = 'promos'
